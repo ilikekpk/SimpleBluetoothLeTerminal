@@ -5,10 +5,12 @@ import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.le.ScanRecord;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
 import android.os.AsyncTask;
@@ -19,6 +21,9 @@ import android.os.Looper;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.ListFragment;
+
+import android.preference.PreferenceManager;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -28,12 +33,36 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * show list of BLE devices
  */
+
+class BLEdevice {
+    BluetoothDevice device;
+    byte[] data;
+
+    static int compareTo(BLEdevice c, BLEdevice d) {
+        BluetoothDevice a = c.device;
+        BluetoothDevice b = d.device;
+        boolean aValid = a.getName()!=null && !a.getName().isEmpty();
+        boolean bValid = b.getName()!=null && !b.getName().isEmpty();
+        if(aValid && bValid) {
+            int ret = a.getName().compareTo(b.getName());
+            if (ret != 0) return ret;
+            return a.getAddress().compareTo(b.getAddress());
+        }
+        if(aValid) return -1;
+        if(bValid) return +1;
+        return a.getAddress().compareTo(b.getAddress());
+    }
+}
+
 public class DevicesFragment extends ListFragment {
 
     private enum ScanState { NONE, LESCAN, DISCOVERY, DISCOVERY_FINISHED }
@@ -46,13 +75,13 @@ public class DevicesFragment extends ListFragment {
 
     private Menu                            menu;
     private BluetoothAdapter                bluetoothAdapter;
-    private ArrayList<BluetoothDevice>      listItems = new ArrayList<>();
-    private ArrayAdapter<BluetoothDevice>   listAdapter;
+    private ArrayList<BLEdevice>      listItems = new ArrayList<>();
+    private ArrayAdapter<BLEdevice>   listAdapter;
 
     public DevicesFragment() {
         leScanCallback = (device, rssi, scanRecord) -> {
             if(device != null && getActivity() != null) {
-                getActivity().runOnUiThread(() -> { updateScan(device); });
+                getActivity().runOnUiThread(() -> { updateScan(device, scanRecord);});
             }
         };
         discoveryBroadcastReceiver = new BroadcastReceiver() {
@@ -61,7 +90,7 @@ public class DevicesFragment extends ListFragment {
                 if(intent.getAction().equals(BluetoothDevice.ACTION_FOUND)) {
                     BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                     if(device.getType() != BluetoothDevice.DEVICE_TYPE_CLASSIC && getActivity() != null) {
-                        getActivity().runOnUiThread(() -> updateScan(device));
+                      //  getActivity().runOnUiThread(() -> updateScan(device));
                     }
                 }
                 if(intent.getAction().equals((BluetoothAdapter.ACTION_DISCOVERY_FINISHED))) {
@@ -75,28 +104,109 @@ public class DevicesFragment extends ListFragment {
         discoveryIntentFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
     }
 
+    private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+    public static String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for (int j = 0; j < bytes.length; j++) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = HEX_ARRAY[v >>> 4];
+            hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
         if(getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
             bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        listAdapter = new ArrayAdapter<BluetoothDevice>(getActivity(), 0, listItems) {
+        listAdapter = new ArrayAdapter<BLEdevice>(getActivity(), 0, listItems) {
             @Override
             public View getView(int position, View view, ViewGroup parent) {
-                BluetoothDevice device = listItems.get(position);
+                BLEdevice bledevice = listItems.get(position);
                 if (view == null)
                     view = getActivity().getLayoutInflater().inflate(R.layout.device_list_item, parent, false);
                 TextView text1 = view.findViewById(R.id.text1);
                 TextView text2 = view.findViewById(R.id.text2);
-                if(device.getName() == null || device.getName().isEmpty())
+                TextView text3 = view.findViewById(R.id.text3);
+                TextView text4 = view.findViewById(R.id.text4);
+
+                if(bledevice.device.getName() == null || bledevice.device.getName().isEmpty())
                     text1.setText("<unnamed>");
                 else
-                    text1.setText(device.getName());
-                text2.setText(device.getAddress());
+                    text1.setText(bledevice.device.getName());
+                    text2.setText(bledevice.device.getAddress());
+                    int adr = 255;
+                    byte[] res = adv_report_parse((byte) 255, bledevice.data);
+
+                    if (res != null)
+                    {
+                        text3.setText(bytesToHex(res));
+                        for (int i = 0; i < 13; i++) Log.e("1", Integer.toString(getParams(res)[i]));
+                        Log.e("1", "-------------------");
+                    }
                 return view;
             }
         };
+    }
+
+    private int getParam(String key)
+    {
+        SharedPreferences sharedPreferences =
+                PreferenceManager.getDefaultSharedPreferences(getActivity());
+        String x = sharedPreferences.getString(key, "");
+        if (x != null) return Integer.parseInt(x);
+        else return 0;
+    }
+
+    private int[] getParams(byte[] manufData)
+    {
+        int len = manufData.length;
+        int pointer = 0;
+        int[] params = new int[13];
+
+        int param = getParam("param1");
+        if (param < len) {
+            for (int i = 0; i < param; i++)
+            {
+                params[0] |= manufData[pointer++] << i;
+                if (pointer >= len) return params;
+            }
+        }
+
+        param = getParam("param2");
+        if (param < len) {
+            for (int i = 0; i < param; i++)
+            {
+                params[1] |= manufData[pointer++] << i;
+                if (pointer >= len) return params;
+            }
+        }
+
+        return params;
+    }
+
+
+
+    private byte[] adv_report_parse(byte type, byte[] data)
+    {
+        int index = 0;
+
+        while (index < data.length - 1)
+        {
+            int field_length = data[index];
+            int field_type = data[index + 1];
+
+            if (field_type == type)
+            {
+                byte[] result = new byte[field_length];
+                for (int i = 0; i < field_length; i++) result[i] = data[i + index + 2];
+                return result;
+            }
+            index += field_length + 1;
+        }
+        return null;
     }
 
     @Override
@@ -167,6 +277,10 @@ public class DevicesFragment extends ListFragment {
         } else if (id == R.id.bt_settings) {
             Intent intent = new Intent();
             intent.setAction(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS);
+            startActivity(intent);
+            return true;
+        } else if (id == R.id.parser_settings) {
+            Intent intent = new Intent(getActivity(), SettingsActivity.class);
             startActivity(intent);
             return true;
         } else {
@@ -240,14 +354,25 @@ public class DevicesFragment extends ListFragment {
         }
     }
 
-    private void updateScan(BluetoothDevice device) {
+    private void updateScan(BluetoothDevice device, byte[] scanRecord) {
         if(scanState == ScanState.NONE)
             return;
-        if(listItems.indexOf(device) < 0) {
-            listItems.add(device);
-            Collections.sort(listItems, DevicesFragment::compareTo);
-            listAdapter.notifyDataSetChanged();
+
+        for (int i = 0; i < listItems.size(); i++) {
+            BluetoothDevice userListName = listItems.get(i).device;
+            if(userListName.equals(device)) {
+                return;
+            }
         }
+       //if(listItems.indexOf(device) < 0) {
+            BLEdevice dev = new BLEdevice();
+            dev.data = scanRecord;
+            dev.device = device;
+            listItems.add(dev);
+
+            //Collections.sort(listItems, BLEdevice::compareTo);
+            listAdapter.notifyDataSetChanged();
+       // }
     }
 
     private void stopScan() {
@@ -276,7 +401,7 @@ public class DevicesFragment extends ListFragment {
     @Override
     public void onListItemClick(ListView l, View v, int position, long id) {
         stopScan();
-        BluetoothDevice device = listItems.get(position-1);
+        BluetoothDevice device = listItems.get(position-1).device;
         Bundle args = new Bundle();
         args.putString("device", device.getAddress());
         Fragment fragment = new TerminalFragment();
@@ -287,16 +412,6 @@ public class DevicesFragment extends ListFragment {
     /**
      * sort by name, then address. sort named devices first
      */
-    static int compareTo(BluetoothDevice a, BluetoothDevice b) {
-        boolean aValid = a.getName()!=null && !a.getName().isEmpty();
-        boolean bValid = b.getName()!=null && !b.getName().isEmpty();
-        if(aValid && bValid) {
-            int ret = a.getName().compareTo(b.getName());
-            if (ret != 0) return ret;
-            return a.getAddress().compareTo(b.getAddress());
-        }
-        if(aValid) return -1;
-        if(bValid) return +1;
-        return a.getAddress().compareTo(b.getAddress());
-    }
+
+
 }

@@ -1,0 +1,59 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/messages_header">
+
+        <EditTextPreference
+            app:key="param1"
+            app:title="param1"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param2"
+            app:title="param2"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param3"
+            app:title="param3"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param4"
+            app:title="param4"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param5"
+            app:title="param5"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param6"
+            app:title="param6"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param7"
+            app:title="param7"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param8"
+            app:title="param8"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param9"
+            app:title="param9"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param10"
+            app:title="param10"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param11"
+            app:title="param11"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param12"
+            app:title="param12"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="param13"
+            app:title="param13"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>
