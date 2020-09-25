@@ -84,24 +84,6 @@ public class DevicesFragment extends ListFragment {
                 getActivity().runOnUiThread(() -> { updateScan(device, scanRecord);});
             }
         };
-        discoveryBroadcastReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if(intent.getAction().equals(BluetoothDevice.ACTION_FOUND)) {
-                    BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                    if(device.getType() != BluetoothDevice.DEVICE_TYPE_CLASSIC && getActivity() != null) {
-                      //  getActivity().runOnUiThread(() -> updateScan(device));
-                    }
-                }
-                if(intent.getAction().equals((BluetoothAdapter.ACTION_DISCOVERY_FINISHED))) {
-                    scanState = ScanState.DISCOVERY_FINISHED; // don't cancel again
-                    stopScan();
-                }
-            }
-        };
-        discoveryIntentFilter = new IntentFilter();
-        discoveryIntentFilter.addAction(BluetoothDevice.ACTION_FOUND);
-        discoveryIntentFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
     }
 
     private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
@@ -137,8 +119,8 @@ public class DevicesFragment extends ListFragment {
                 else
                     text1.setText(bledevice.device.getName());
                     text2.setText(bledevice.device.getAddress());
-                    int adr = 255;
-                    byte[] res = adv_report_parse((byte) 255, bledevice.data);
+
+                    byte[] res = advParseManufacturerData(bledevice.data);
 
                     if (res != null)
                     {
@@ -189,16 +171,16 @@ public class DevicesFragment extends ListFragment {
 
 
 
-    private byte[] adv_report_parse(byte type, byte[] data)
+    private byte[] advParseManufacturerData(byte[] data)
     {
         int index = 0;
 
         while (index < data.length - 1)
         {
             int field_length = data[index];
-            int field_type = data[index + 1];
+            byte field_type = data[index + 1];
 
-            if (field_type == type)
+            if (field_type == (byte) 0xff)
             {
                 byte[] result = new byte[field_length];
                 for (int i = 0; i < field_length; i++) result[i] = data[i + index + 2];
@@ -230,39 +212,6 @@ public class DevicesFragment extends ListFragment {
         } else if(!bluetoothAdapter.isEnabled()) {
             menu.findItem(R.id.ble_scan).setEnabled(false);
         }
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        getActivity().registerReceiver(discoveryBroadcastReceiver, discoveryIntentFilter);
-        if(bluetoothAdapter == null) {
-            setEmptyText("<bluetooth LE not supported>");
-        } else if(!bluetoothAdapter.isEnabled()) {
-            setEmptyText("<bluetooth is disabled>");
-            if (menu != null) {
-                listItems.clear();
-                listAdapter.notifyDataSetChanged();
-                menu.findItem(R.id.ble_scan).setEnabled(false);
-            }
-        } else {
-            setEmptyText("<use SCAN to refresh devices>");
-            if (menu != null)
-                menu.findItem(R.id.ble_scan).setEnabled(true);
-        }
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        stopScan();
-        getActivity().unregisterReceiver(discoveryBroadcastReceiver);
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        menu = null;
     }
 
     @Override
@@ -360,19 +309,15 @@ public class DevicesFragment extends ListFragment {
 
         for (int i = 0; i < listItems.size(); i++) {
             BluetoothDevice userListName = listItems.get(i).device;
-            if(userListName.equals(device)) {
+            if (userListName.equals(device)) {
                 return;
             }
         }
-       //if(listItems.indexOf(device) < 0) {
             BLEdevice dev = new BLEdevice();
             dev.data = scanRecord;
             dev.device = device;
             listItems.add(dev);
-
-            //Collections.sort(listItems, BLEdevice::compareTo);
             listAdapter.notifyDataSetChanged();
-       // }
     }
 
     private void stopScan() {
@@ -408,10 +353,4 @@ public class DevicesFragment extends ListFragment {
         fragment.setArguments(args);
         getFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "terminal").addToBackStack(null).commit();
     }
-
-    /**
-     * sort by name, then address. sort named devices first
-     */
-
-
 }
