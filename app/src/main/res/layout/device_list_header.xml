@@ -14,4 +14,11 @@
         android:gravity="center"
         android:text="@string/devices"
         android:textAppearance="@style/TextAppearance.AppCompat.Medium" />
+
+    <EditText
+        android:id="@+id/textt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ems="10"
+        android:inputType="textPersonName" />
 </LinearLayout>

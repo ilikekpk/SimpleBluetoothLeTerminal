@@ -18,5 +18,22 @@
         <item>reply</item>
         <item>reply_all</item>
     </string-array>
-
+    <string-array name="margin_c_type">
+        <item>none</item>
+        <item>uint8_t</item>
+        <item>int8_t</item>
+        <item>uint16_t</item>
+        <item>int16_t</item>
+        <item>uint32_t</item>
+        <item>int32_t</item>
+    </string-array>
+    <string-array name="margin_c_type_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+    </string-array>
 </resources>

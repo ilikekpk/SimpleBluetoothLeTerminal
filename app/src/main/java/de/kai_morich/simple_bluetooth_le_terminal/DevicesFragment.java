@@ -30,6 +30,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -46,21 +47,6 @@ import java.util.Set;
 class BLEdevice {
     BluetoothDevice device;
     byte[] data;
-
-    static int compareTo(BLEdevice c, BLEdevice d) {
-        BluetoothDevice a = c.device;
-        BluetoothDevice b = d.device;
-        boolean aValid = a.getName()!=null && !a.getName().isEmpty();
-        boolean bValid = b.getName()!=null && !b.getName().isEmpty();
-        if(aValid && bValid) {
-            int ret = a.getName().compareTo(b.getName());
-            if (ret != 0) return ret;
-            return a.getAddress().compareTo(b.getAddress());
-        }
-        if(aValid) return -1;
-        if(bValid) return +1;
-        return a.getAddress().compareTo(b.getAddress());
-    }
 }
 
 public class DevicesFragment extends ListFragment {
@@ -77,6 +63,7 @@ public class DevicesFragment extends ListFragment {
     private BluetoothAdapter                bluetoothAdapter;
     private ArrayList<BLEdevice>      listItems = new ArrayList<>();
     private ArrayAdapter<BLEdevice>   listAdapter;
+    private View header;
 
     public DevicesFragment() {
         leScanCallback = (device, rssi, scanRecord) -> {
@@ -125,7 +112,20 @@ public class DevicesFragment extends ListFragment {
                     if (res != null)
                     {
                         text3.setText(bytesToHex(res));
-                        for (int i = 0; i < 13; i++) Log.e("1", Integer.toString(getParams(res)[i]));
+                        long[] l = getParams(res);
+                        String paramsString = "param1: "  + l[0] +
+                                              " param2: "  + l[1] +
+                                              " param3: "  + l[2] +
+                                              " param4: "  + l[3] +
+                                              " param5: "  + l[4] +
+                                              " param6: "  + l[5] +
+                                              " param7: "  + l[6] +
+                                              " param8: "  + l[7];
+                        text4.setText(paramsString);
+                        for (int i = 0; i < 13; i++) {
+
+                            Log.e("1", Long.toString(getParams(res)[i]));
+                        }
                         Log.e("1", "-------------------");
                     }
                 return view;
@@ -142,30 +142,60 @@ public class DevicesFragment extends ListFragment {
         else return 0;
     }
 
-    private int[] getParams(byte[] manufData)
+    private long[] getParams(byte[] manufData)
     {
         int len = manufData.length;
-        int pointer = 0;
-        int[] params = new int[13];
+        int pointer = 2; // skip manufacturer info
+        long[] params = new long[13];
 
-        int param = getParam("param1");
-        if (param < len) {
-            for (int i = 0; i < param; i++)
-            {
-                params[0] |= manufData[pointer++] << i;
+        for (int i = 0; i < 8; i++) {
+            int paramID = getParam("param" + (i + 1));
+            int margin_size = 0;
+            boolean isSigned;
+            switch (paramID) {
+                case 2:         // uint8_t
+                    margin_size = 1;
+                    isSigned = false;
+                    break;
+                case 3:         // int8_t
+                    margin_size = 1;
+                    isSigned = true;
+                    break;
+                case 4:         // uint16_t
+                    margin_size = 2;
+                    isSigned = false;
+                    break;
+                case 5:         // int16_t
+                    margin_size = 2;
+                    isSigned = true;
+                    break;
+                case 6:         // uint32_t
+                    margin_size = 4;
+                    isSigned = false;
+                    break;
+                case 7:         // int32_t
+                    margin_size = 4;
+                    isSigned = true;
+                    break;
+                default:
+                    margin_size = 0;
+                    isSigned = false;
+                    break;
+            }
+
+            Log.e("2", "param: " + i + " size: " + margin_size);
+
+            for (int j = 0; j < margin_size; j++) {
+                params[i] |= (manufData[pointer++] & 0xFFL) << j * 8;
+
+                if (isSigned && j == margin_size - 1)
+                {
+                    if ((params[i] & (0x80L << j * 8)) != 0) params[i] -= Math.pow(2, margin_size * 8);
+                }
+
                 if (pointer >= len) return params;
             }
         }
-
-        param = getParam("param2");
-        if (param < len) {
-            for (int i = 0; i < param; i++)
-            {
-                params[1] |= manufData[pointer++] << i;
-                if (pointer >= len) return params;
-            }
-        }
-
         return params;
     }
 
@@ -195,8 +225,9 @@ public class DevicesFragment extends ListFragment {
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
         setListAdapter(null);
-        View header = getActivity().getLayoutInflater().inflate(R.layout.device_list_header, null, false);
+        header = getActivity().getLayoutInflater().inflate(R.layout.device_list_header, null, false);
         getListView().addHeaderView(header, null, false);
+
         setEmptyText("initializing...");
         ((TextView) getListView().getEmptyView()).setTextSize(18);
         setListAdapter(listAdapter);
@@ -242,6 +273,7 @@ public class DevicesFragment extends ListFragment {
         if(scanState != ScanState.NONE)
             return;
         scanState = ScanState.LESCAN;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (getActivity().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 scanState = ScanState.NONE;
@@ -313,11 +345,22 @@ public class DevicesFragment extends ListFragment {
                 return;
             }
         }
+            TextView txt = header.findViewById(R.id.textt);
+            String searchName = txt.getText().toString();
+
             BLEdevice dev = new BLEdevice();
             dev.data = scanRecord;
             dev.device = device;
-            listItems.add(dev);
-            listAdapter.notifyDataSetChanged();
+            Log.e("3", searchName);
+            if (searchName.equals("")) {
+                listItems.add(dev);
+                listAdapter.notifyDataSetChanged();
+                return;
+            }
+            if (dev.device.getName() != null && dev.device.getName().indexOf(searchName) != -1) {
+                listItems.add(dev);
+                listAdapter.notifyDataSetChanged();
+            }
     }
 
     private void stopScan() {
