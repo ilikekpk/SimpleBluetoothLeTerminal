@@ -63,7 +63,6 @@ public class DevicesFragment extends ListFragment {
     private BluetoothAdapter                bluetoothAdapter;
     private ArrayList<BLEdevice>      listItems = new ArrayList<>();
     private ArrayAdapter<BLEdevice>   listAdapter;
-    private View header;
 
     public DevicesFragment() {
         leScanCallback = (device, rssi, scanRecord) -> {
@@ -225,9 +224,6 @@ public class DevicesFragment extends ListFragment {
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
         setListAdapter(null);
-        header = getActivity().getLayoutInflater().inflate(R.layout.device_list_header, null, false);
-        getListView().addHeaderView(header, null, false);
-
         setEmptyText("initializing...");
         ((TextView) getListView().getEmptyView()).setTextSize(18);
         setListAdapter(listAdapter);
@@ -345,19 +341,20 @@ public class DevicesFragment extends ListFragment {
                 return;
             }
         }
-            TextView txt = header.findViewById(R.id.textt);
-            String searchName = txt.getText().toString();
 
             BLEdevice dev = new BLEdevice();
             dev.data = scanRecord;
             dev.device = device;
-            Log.e("3", searchName);
-            if (searchName.equals("")) {
+
+            CharSequence filter_name = this.getArguments().getCharSequence("filter_name", "");
+
+            if (filter_name.toString().equals("")) {
                 listItems.add(dev);
                 listAdapter.notifyDataSetChanged();
                 return;
             }
-            if (dev.device.getName() != null && dev.device.getName().indexOf(searchName) != -1) {
+
+            if (dev.device.getName() != null && dev.device.getName().toLowerCase().indexOf(filter_name.toString().toLowerCase()) != -1) {
                 listItems.add(dev);
                 listAdapter.notifyDataSetChanged();
             }
