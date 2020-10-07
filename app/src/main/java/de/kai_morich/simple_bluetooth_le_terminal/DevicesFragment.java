@@ -132,47 +132,40 @@ public class DevicesFragment extends ListFragment {
         };
     }
 
-    private int getParam(String key)
-    {
-        SharedPreferences sharedPreferences =
-                PreferenceManager.getDefaultSharedPreferences(getActivity());
-        String x = sharedPreferences.getString(key, "");
-        if (x != null) return Integer.parseInt(x);
-        else return 0;
-    }
-
     private long[] getParams(byte[] manufData)
     {
         int len = manufData.length;
         int pointer = 2; // skip manufacturer info
         long[] params = new long[13];
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
 
         for (int i = 0; i < 8; i++) {
-            int paramID = getParam("param" + (i + 1));
+            String param = sharedPreferences.getString("param" + (i + 1), "");
             int margin_size = 0;
             boolean isSigned;
-            switch (paramID) {
-                case 2:         // uint8_t
+            assert param != null;
+            switch (param) {
+                case "uint8_t":         // uint8_t
                     margin_size = 1;
                     isSigned = false;
                     break;
-                case 3:         // int8_t
+                case "int8_t":         // int8_t
                     margin_size = 1;
                     isSigned = true;
                     break;
-                case 4:         // uint16_t
+                case "uint16_t":         // uint16_t
                     margin_size = 2;
                     isSigned = false;
                     break;
-                case 5:         // int16_t
+                case "int16_t":         // int16_t
                     margin_size = 2;
                     isSigned = true;
                     break;
-                case 6:         // uint32_t
+                case "uint32_t":         // uint32_t
                     margin_size = 4;
                     isSigned = false;
                     break;
-                case 7:         // int32_t
+                case "int32_t":         // int32_t
                     margin_size = 4;
                     isSigned = true;
                     break;
