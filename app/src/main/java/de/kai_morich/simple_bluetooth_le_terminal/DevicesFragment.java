@@ -35,10 +35,15 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
+
+import javax.crypto.NoSuchPaddingException;
 
 /**
  * show list of BLE devices
@@ -63,6 +68,9 @@ public class DevicesFragment extends ListFragment {
     private BluetoothAdapter                bluetoothAdapter;
     private ArrayList<BLEdevice>      listItems = new ArrayList<>();
     private ArrayAdapter<BLEdevice>   listAdapter;
+
+    private byte[] ctcData = new byte[16];
+    private byte[] ctcKey = new byte[16];
 
     public DevicesFragment() {
         leScanCallback = (device, rssi, scanRecord) -> {
@@ -110,8 +118,19 @@ public class DevicesFragment extends ListFragment {
 
                     if (res != null)
                     {
-                        text3.setText(bytesToHex(res));
-                        long[] l = getParams(res);
+                        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
+                        Log.e("mac", bledevice.device.getAddress());
+                        long password = Long.parseLong(sharedPreferences.getString("device_password", "0"));
+                        if (password > 999999 || password < 0) password = 0;
+                        parseCtcParams();
+                        EscortAdvCrypto escortAdvCrypto = new EscortAdvCrypto(ctcData, ctcKey, bledevice.device.getName(), bledevice.device.getAddress(), password);
+                        byte decryptedManufData[];
+                        if (sharedPreferences.getBoolean("decrypt_status", false)) decryptedManufData = escortAdvCrypto.decryptPacket(res);
+                        else decryptedManufData = res;
+                        long[] l = getParams(decryptedManufData);
+
+                        text3.setText(bytesToHex(decryptedManufData));
+
                         String paramsString = "param1: "  + l[0] +
                                               " param2: "  + l[1] +
                                               " param3: "  + l[2] +
@@ -132,16 +151,39 @@ public class DevicesFragment extends ListFragment {
         };
     }
 
+    private void parseCtcParams()
+    {
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        String ctcDataString = sharedPreferences.getString("ctc_data", "0");
+        String ctcKeyString = sharedPreferences.getString("ctc_key", "0");
+        if (ctcDataString.length() != 32 || ctcKeyString.length() != 32) return;
+
+        byte [] parsedData = hexStringToByteArray(ctcDataString);
+        byte [] parsedKey = hexStringToByteArray(ctcKeyString);
+
+        System.arraycopy(parsedData, 0, ctcData, 0, 16);
+        System.arraycopy(parsedKey, 0, ctcKey, 0, 16);
+    }
+
+    private byte[] hexStringToByteArray(String s) {
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                    + Character.digit(s.charAt(i+1), 16));
+        }
+        return data;
+    }
+
     private long[] getParams(byte[] manufData)
     {
         int len = manufData.length;
-        int pointer = 2; // skip manufacturer info
+        int pointer = 0; // skip manufacturer info (currently rudiment)
         long[] params = new long[13];
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-
         for (int i = 0; i < 8; i++) {
             String param = sharedPreferences.getString("param" + (i + 1), "");
-            int margin_size = 0;
+            int margin_size;
             boolean isSigned;
             assert param != null;
             switch (param) {
@@ -177,6 +219,8 @@ public class DevicesFragment extends ListFragment {
 
             Log.e("2", "param: " + i + " size: " + margin_size);
 
+
+
             for (int j = 0; j < margin_size; j++) {
                 params[i] |= (manufData[pointer++] & 0xFFL) << j * 8;
 
@@ -204,8 +248,8 @@ public class DevicesFragment extends ListFragment {
 
             if (field_type == (byte) 0xff)
             {
-                byte[] result = new byte[field_length];
-                for (int i = 0; i < field_length; i++) result[i] = data[i + index + 2];
+                byte[] result = new byte[field_length - 3];
+                for (int i = 0; i < result.length; i++) result[i] = data[i + index + 4];  //4  - skip manuf id field name and field len
                 return result;
             }
             index += field_length + 1;
